@@ -1,4 +1,10 @@
-elm-stuff
-node-modules
+# general
 .DS_Store
+node_modules/
+
+# elm-package generated files
+elm-stuff/
+
+# elm-repl generated files
+repl-temp-*
 
