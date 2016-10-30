@@ -99,8 +99,8 @@ subscriptions model =
 view : Model -> Html.Html Msg
 view model =
   let
-    renderModel = applyDrag (Debug.log "model" model)
-    tiles' = Debug.log "tiles" (tiles renderModel)
+    renderModel = applyDrag model
+    tiles' = tiles renderModel
     tileView' = tileView renderModel
   in
     Html.div
@@ -116,19 +116,19 @@ view model =
 
 tiles : Model -> List Position
 tiles model =
+  (relativeTileRange model .x .width) `ListE.andThen` \x ->
+  (relativeTileRange model .y .height) `ListE.andThen` \y ->
+    [{ x = model.centre.x + x, y = model.centre.y + y }]
+
+relativeTileRange : Model -> (Position -> Int) -> (Size -> Int) -> List Int
+relativeTileRange model axis size =
   let
-    count axis =
-      (axis model.renderSize + axis model.tileSize - 1) // (axis model.tileSize)
-    range c count =
-      List.map (\p -> c + p) [-count//2 .. (count - count//2)]
-
-    xRange = range model.centre.x (count .width)
-    yRange = range model.centre.y (count .height)
-
+    centre = (size model.renderSize - size model.tileSize) // 2 + axis model.offset
+    tilesForSize s = (s + size model.tileSize - 1) // size model.tileSize
+    before = tilesForSize centre
+    after = tilesForSize (size model.renderSize - centre) - 1
   in
-    xRange `ListE.andThen` \x ->
-    yRange `ListE.andThen` \y ->
-      [{ x = x, y = y }]
+    [-before .. after]
 
 tileView: Model -> Position -> Html.Html Msg
 tileView model pos =
