@@ -1,6 +1,5 @@
 module Map exposing
-  ( Size
-  , Config
+  ( Config
   , Model
   , Msg
   , defaultModel
@@ -12,17 +11,13 @@ module Map exposing
 import Debug
 import Html as Html
 import Html.Attributes as Attributes
-import Html.Events exposing (on)
+import Html.Events exposing (on, onClick)
 import List.Extra as ListE
 import Json.Decode as Json
-import Mouse exposing (Position)
+import Mouse
 
+import Geometry exposing (..)
 import Util exposing (..)
-
-type alias Size =
-  { width : Int
-  , height : Int
-  }
 
 type alias Config =
   { tileUrlPattern : String }
@@ -46,6 +41,8 @@ type Msg
   = DragStart Position
   | DragAt Position
   | DragEnd Position
+  | ZoomIn
+  | ZoomOut
 
 defaultModel =
   { config = { tileUrlPattern = "http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" }
@@ -66,6 +63,10 @@ update msg model =
       ({ model | drag = Maybe.map (\{start} -> Drag start xy) model.drag }, Cmd.none)
     DragEnd xy ->
       (applyDrag model, Cmd.none)
+    ZoomIn ->
+      ({ model | zoom = model.zoom + 1 }, Cmd.none)
+    ZoomOut ->
+      ({ model | zoom = model.zoom - 1 }, Cmd.none)
 
 applyDrag : Model -> Model
 applyDrag model =
@@ -98,6 +99,13 @@ subscriptions model =
 
 view : Model -> Html.Html Msg
 view model =
+  Html.div []
+  [ viewMapLayer model
+  , viewControlsLayer model
+  ]
+
+viewMapLayer : Model -> Html.Html Msg
+viewMapLayer model =
   let
     renderModel = applyDrag model
     tiles' = tiles renderModel
@@ -123,12 +131,16 @@ tiles model =
 relativeTileRange : Model -> (Position -> Int) -> (Size -> Int) -> List Int
 relativeTileRange model axis size =
   let
-    centre = (size model.renderSize - size model.tileSize) // 2 + axis model.offset
     tilesForSize s = (s + size model.tileSize - 1) // size model.tileSize
+    centre = centreTileCoord model axis size
     before = tilesForSize centre
     after = tilesForSize (size model.renderSize - centre) - 1
   in
     [-before .. after]
+
+centreTileCoord : Model -> (Position -> Int) -> (Size -> Int) -> Int
+centreTileCoord model axis size =
+  (size model.renderSize - size model.tileSize) // 2 + axis model.offset
 
 tileView: Model -> Position -> Html.Html Msg
 tileView model pos =
@@ -147,13 +159,9 @@ tileView model pos =
 translate3d: Model -> Position -> String
 translate3d model pos =
   let
-    coord axis size =
-      ((size model.renderSize - size model.tileSize) // 2)
-      + (axis pos - axis model.centre) * size model.tileSize
-      + axis model.offset
-
-    x = coord .x .width
-    y = coord .y .height
+    coord axis size = (axis pos - axis model.centre) * size model.tileSize
+    x = (centreTileCoord model .x .width) + coord .x .width
+    y = (centreTileCoord model .y .height) + coord .y .height
   in
     stringWithSubstitutions "translate3d({x}px, {y}px, 0px)"
       [ ("{x}", toString x)
@@ -174,3 +182,10 @@ subdomain pos =
     0 -> "a"
     1 -> "b"
     _ -> "c"
+
+viewControlsLayer : Model -> Html.Html Msg
+viewControlsLayer model =
+  Html.div []
+  [ Html.button [ onClick ZoomIn ] [Html.text "+"]
+  , Html.button [ onClick ZoomOut ] [Html.text "-"]
+  ]
