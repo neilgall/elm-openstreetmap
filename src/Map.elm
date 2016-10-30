@@ -17,6 +17,7 @@ import Json.Decode as Json
 import Mouse
 
 import Geometry exposing (..)
+import Projection exposing (..)
 import Util exposing (..)
 
 type alias Config =
@@ -24,8 +25,8 @@ type alias Config =
 
 type alias Model =
   { config : Config
-  , centre : Position
-  , offset : Position
+  , centre : Point
+  , offset : Point
   , zoom : Int
   , renderSize : Size
   , tileSize : Size
@@ -33,22 +34,22 @@ type alias Model =
   }
 
 type alias Drag =
-  { start : Position
-  , current : Position
+  { start : Point
+  , current : Point
   }
 
 type Msg
-  = DragStart Position
-  | DragAt Position
-  | DragEnd Position
+  = DragStart Point
+  | DragAt Point
+  | DragEnd Point
   | ZoomIn
   | ZoomOut
 
 defaultModel =
   { config = { tileUrlPattern = "http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" }
   , centre = { x = 123, y = 79 }
-  , offset = { x = 0, y = 0 }
   , zoom = 8
+  , offset = { x = 0, y = 0 }
   , renderSize = { width = 400, height = 400 }
   , tileSize = { width = 256, height = 256 }
   , drag = Nothing
@@ -64,9 +65,18 @@ update msg model =
     DragEnd xy ->
       (applyDrag model, Cmd.none)
     ZoomIn ->
-      ({ model | zoom = model.zoom + 1 }, Cmd.none)
+      (zoom model 1, Cmd.none)
     ZoomOut ->
-      ({ model | zoom = model.zoom - 1 }, Cmd.none)
+      (zoom model -1, Cmd.none)
+
+zoom : Model -> Int -> Model
+zoom model delta =
+  let
+    latLon = latLonFromPoint model.zoom model.centre
+    zoom = model.zoom + delta
+    centre = pointFromLatLon zoom latLon
+  in
+    { model | centre = centre, zoom = zoom }
 
 applyDrag : Model -> Model
 applyDrag model =
@@ -83,8 +93,8 @@ applyDrag model =
         offsetDY = dy - centreDY * model.tileSize.height
       in
         { model
-          | centre = { x = model.centre.x - centreDX, y = model.centre.y - centreDY }
-          , offset = { x = model.offset.x + offsetDX, y = model.offset.y + offsetDY }
+          | centre = translatePoint model.centre -centreDX -centreDY
+          , offset = translatePoint model.offset offsetDX offsetDY
           , drag = Nothing
         }
 
@@ -122,13 +132,13 @@ viewMapLayer model =
       ]
       (List.map tileView' tiles')
 
-tiles : Model -> List Position
+tiles : Model -> List Point
 tiles model =
   (relativeTileRange model .x .width) `ListE.andThen` \x ->
   (relativeTileRange model .y .height) `ListE.andThen` \y ->
-    [{ x = model.centre.x + x, y = model.centre.y + y }]
+  [ translatePoint model.centre x y ]
 
-relativeTileRange : Model -> (Position -> Int) -> (Size -> Int) -> List Int
+relativeTileRange : Model -> (Point -> Int) -> (Size -> Int) -> List Int
 relativeTileRange model axis size =
   let
     tilesForSize s = (s + size model.tileSize - 1) // size model.tileSize
@@ -138,11 +148,11 @@ relativeTileRange model axis size =
   in
     [-before .. after]
 
-centreTileCoord : Model -> (Position -> Int) -> (Size -> Int) -> Int
-centreTileCoord model axis size =
-  (size model.renderSize - size model.tileSize) // 2 + axis model.offset
+centreTileCoord : Model -> (Point -> Int) -> (Size -> Int) -> Int
+centreTileCoord {renderSize, tileSize, offset} axis size =
+  (size renderSize - size tileSize) // 2 + axis offset
 
-tileView: Model -> Position -> Html.Html Msg
+tileView: Model -> Point -> Html.Html Msg
 tileView model pos =
    Html.img
     [ Attributes.style
@@ -156,7 +166,7 @@ tileView model pos =
     ]
     []
 
-translate3d: Model -> Position -> String
+translate3d: Model -> Point -> String
 translate3d model pos =
   let
     coord axis size = (axis pos - axis model.centre) * size model.tileSize
@@ -167,25 +177,39 @@ translate3d model pos =
       [ ("{x}", toString x)
       , ("{y}", toString y) ]
 
-tileUrl: Model -> Position -> String
-tileUrl model pos =
-  stringWithSubstitutions model.config.tileUrlPattern
-    [ ("{s}", subdomain pos)
-    , ("{z}", toString model.zoom)
-    , ("{y}", toString pos.y)
-    , ("{x}", toString pos.x)
+tileUrl: Model -> Point -> String
+tileUrl {config, zoom} {x, y} =
+  stringWithSubstitutions config.tileUrlPattern
+    [ ("{s}", x+y |> subdomain)
+    , ("{x}", toString x)
+    , ("{y}", toString y)
+    , ("{z}", toString zoom)
     ]
 
-subdomain: Position -> String
-subdomain pos =
-  case (pos.x + pos.y) % 3 of
+subdomain: Int -> String
+subdomain n =
+  case n % 3 of
     0 -> "a"
     1 -> "b"
     _ -> "c"
 
 viewControlsLayer : Model -> Html.Html Msg
 viewControlsLayer model =
-  Html.div []
-  [ Html.button [ onClick ZoomIn ] [Html.text "+"]
-  , Html.button [ onClick ZoomOut ] [Html.text "-"]
+  Html.div
+  []
+  [ viewControlButton {x=20, y=20} ZoomIn "+"
+  , viewControlButton {x=20, y=40} ZoomOut "-"
   ]
+
+viewControlButton : Point -> Msg -> String -> Html.Html Msg
+viewControlButton {x,y} action label =
+  Html.button
+  [ Attributes.style
+    [ ("position", "absolute")
+    , ("left", px x)
+    , ("top", px y)
+    , ("width", "20px")
+    ]
+  , onClick action
+  ]
+  [Html.text label]
