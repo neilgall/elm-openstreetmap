@@ -1,19 +1,23 @@
+module Map exposing
+  ( Size
+  , Config
+  , Model
+  , Msg
+  , defaultModel
+  , view
+  , update
+  , subscriptions
+  )
+
 import Debug
 import Html as Html
 import Html.Attributes as Attributes
-import Html.App as App
 import Html.Events exposing (on)
 import List.Extra as ListE
 import Json.Decode as Json
 import Mouse exposing (Position)
-import String.Extra as StringE
 
-main = App.program
-  { init = init
-  , view = view
-  , update = update
-  , subscriptions = subscriptions
-  }
+import Util exposing (..)
 
 type alias Size =
   { width : Int
@@ -42,9 +46,6 @@ type Msg
   = DragStart Position
   | DragAt Position
   | DragEnd Position
-
-init : (Model, Cmd Msg)
-init = (defaultModel, Cmd.none)
 
 defaultModel =
   { config = { tileUrlPattern = "http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" }
@@ -142,14 +143,6 @@ tileView model pos =
     , Attributes.src (tileUrl model pos)
     ]
     []
-
-stringWithSubstitutions : String -> List (String, String) -> String
-stringWithSubstitutions str subs =
-  let replace (a, b) = StringE.replace a b in
-  List.foldr replace str subs
-
-px : Int -> String
-px n = toString n ++ "px"
 
 translate3d: Model -> Position -> String
 translate3d model pos =
