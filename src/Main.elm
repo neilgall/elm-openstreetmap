@@ -27,6 +27,7 @@ type alias Model =
   { config : Config
   , centre : Position
   , offset : Position
+  , zoom : Int
   , renderSize : Size
   , tileSize : Size
   , drag : Maybe Drag
@@ -49,33 +50,11 @@ defaultModel =
   { config = { tileUrlPattern = "http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" }
   , centre = { x = 123, y = 79 }
   , offset = { x = 0, y = 0 }
-  , renderSize = { width = 600, height = 600 }
+  , zoom = 8
+  , renderSize = { width = 400, height = 400 }
   , tileSize = { width = 256, height = 256 }
   , drag = Nothing
   }
-
-type alias RenderModel =
-  { model : Model
-  , zoom : Int
-  , xmin : Int
-  , ymin : Int
-  , xmax : Int
-  , ymax : Int
-  }
-
-renderModel : Model -> RenderModel
-renderModel model =
-  let
-    columns = model.renderSize.width // model.tileSize.width + 1
-    rows = model.renderSize.height // model.tileSize.height + 1
-  in
-    { model = model
-    , zoom = 8
-    , xmin = model.centre.x - columns // 2
-    , xmax = model.centre.x + columns - (columns // 2)
-    , ymin = model.centre.y - rows // 2
-    , ymax = model.centre.y + rows - (rows // 2)
-    }
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -101,7 +80,7 @@ applyDrag model =
         offsetDX = dx - centreDX * model.tileSize.height
         offsetDY = dy - centreDY * model.tileSize.height
       in
-        Debug.log "drag" { model
+        { model
           | centre = { x = model.centre.x - centreDX, y = model.centre.y - centreDY }
           , offset = { x = model.offset.x + offsetDX, y = model.offset.y + offsetDY }
           , drag = Nothing
@@ -119,35 +98,48 @@ subscriptions model =
 view : Model -> Html.Html Msg
 view model =
   let
-    rModel = renderModel <| applyDrag model
-    tilePositions = tiles rModel
+    renderModel = applyDrag (Debug.log "model" model)
+    tiles' = Debug.log "tiles" (tiles renderModel)
+    tileView' = tileView renderModel
   in
     Html.div
       [ on "mousedown" (Json.map DragStart Mouse.position)
       , Attributes.style
-        [ ("width", (toString model.renderSize.width) ++ "px")
-        , ("height", (toString model.renderSize.height) ++ "px")
+        [ ("width", px model.renderSize.width)
+        , ("height", px model.renderSize.height)
+        , ("position", "relative")
+        , ("overflow", "hidden")
         ]
       ]
-      (List.map (tileView rModel) tilePositions)
+      (List.map tileView' tiles')
 
-tiles : RenderModel -> List Position
-tiles rmodel =
-  [rmodel.xmin .. rmodel.xmax] `ListE.andThen` \x ->
-  [rmodel.ymin .. rmodel.ymax] `ListE.andThen` \y ->
-    [{ x = x, y = y}]
+tiles : Model -> List Position
+tiles model =
+  let
+    count axis =
+      (axis model.renderSize + axis model.tileSize - 1) // (axis model.tileSize)
+    range c count =
+      List.map (\p -> c + p) [-count//2 .. (count - count//2)]
 
-tileView: RenderModel -> Position -> Html.Html Msg
-tileView rModel pos =
-  Html.img
+    xRange = range model.centre.x (count .width)
+    yRange = range model.centre.y (count .height)
+
+  in
+    xRange `ListE.andThen` \x ->
+    yRange `ListE.andThen` \y ->
+      [{ x = x, y = y }]
+
+tileView: Model -> Position -> Html.Html Msg
+tileView model pos =
+   Html.img
     [ Attributes.style
       [ ("position", "absolute")
-      , ("width", px rModel.model.tileSize.width)
-      , ("height", px rModel.model.tileSize.height)
-      , ("transform", translate3d rModel pos)
+      , ("width", px model.tileSize.width)
+      , ("height", px model.tileSize.height)
+      , ("transform", translate3d model pos)
       ]
     , Attributes.draggable "false"
-    , Attributes.src (tileUrl rModel pos)
+    , Attributes.src (tileUrl model pos)
     ]
     []
 
@@ -159,21 +151,26 @@ stringWithSubstitutions str subs =
 px : Int -> String
 px n = toString n ++ "px"
 
-translate3d: RenderModel -> Position -> String
-translate3d rModel pos =
+translate3d: Model -> Position -> String
+translate3d model pos =
   let
-    x = (pos.x - rModel.xmin) * rModel.model.tileSize.width + rModel.model.offset.x
-    y = (pos.y - rModel.ymin) * rModel.model.tileSize.height + rModel.model.offset.y
+    coord axis size =
+      ((size model.renderSize - size model.tileSize) // 2)
+      + (axis pos - axis model.centre) * size model.tileSize
+      + axis model.offset
+
+    x = coord .x .width
+    y = coord .y .height
   in
     stringWithSubstitutions "translate3d({x}px, {y}px, 0px)"
       [ ("{x}", toString x)
       , ("{y}", toString y) ]
 
-tileUrl: RenderModel -> Position -> String
-tileUrl rModel pos =
-  stringWithSubstitutions rModel.model.config.tileUrlPattern
+tileUrl: Model -> Position -> String
+tileUrl model pos =
+  stringWithSubstitutions model.config.tileUrlPattern
     [ ("{s}", subdomain pos)
-    , ("{z}", toString rModel.zoom)
+    , ("{z}", toString model.zoom)
     , ("{y}", toString pos.y)
     , ("{x}", toString pos.x)
     ]
