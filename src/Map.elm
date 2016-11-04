@@ -104,7 +104,10 @@ subscriptions model =
 
 view : Model -> Html.Html Msg
 view model =
-  Html.div []
+  Html.div
+  [ Attributes.style
+    [ ("position", "relative") ]
+  ]
   [ viewMapLayer model
   , viewControlsLayer model
   ]
@@ -195,7 +198,7 @@ viewControlsLayer model =
   Html.div
   []
   [ viewControlButton {x=20, y=20} ZoomIn "+"
-  , viewControlButton {x=20, y=40} ZoomOut "-"
+  , viewControlButton {x=20, y=50} ZoomOut "-"
   ]
 
 viewControlButton : Point Int -> Msg -> String -> Html.Html Msg
@@ -205,7 +208,8 @@ viewControlButton {x,y} action label =
     [ ("position", "absolute")
     , ("left", px x)
     , ("top", px y)
-    , ("width", "20px")
+    , ("font-size", "large")
+    , ("width", "30px")
     ]
   , onClick action
   ]
