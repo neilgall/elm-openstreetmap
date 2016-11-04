@@ -7,22 +7,25 @@ import Expect
 import String
 
 import Projection exposing (..)
+import TestUtil exposing (..)
 
 all : Test
 all =
     describe "Projection tests"
-      [ pointWithinRange
+      [ mapPointLatLonIsomorphism
       ]
 
-pointWithinRange =
-  fuzz2 randomLatLon randomZoom "Tile X,Y is within range" <|
+mapPointLatLonIsomorphism =
+  fuzz2 randomLatLon randomZoom "Lat,Lon and MapPoint are isomorphic" <|
     \latlon zoom ->
       let
-        {x, y} = pointFromLatLon zoom latlon
-      in
-        Expect.true ("tile " ++ toString x ++ "," ++ toString y)
-            (0 <= x && x < 2^zoom
-          && 0 <= y && y < 2^zoom)
+        mapPoint = mapPointFromLatLon zoom latlon
+        latlon' = latLonFromMapPoint zoom mapPoint
+    in
+      expectAll
+        [ expectEqualWithin 1e-8 latlon.latitude latlon'.latitude
+        , expectEqualWithin 1e-8 latlon.longitude latlon'.longitude
+        ]
 
 randomLatitude = floatRange -85.05 85.05
 randomLongitude = floatRange -180 179.99
