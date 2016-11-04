@@ -25,31 +25,29 @@ type alias Config =
 
 type alias Model =
   { config : Config
-  , centre : Point
-  , offset : Point
+  , centre : MapPoint
   , zoom : Int
-  , renderSize : Size
-  , tileSize : Size
+  , renderSize : MapSize
+  , tileSize : TileSize
   , drag : Maybe Drag
   }
 
 type alias Drag =
-  { start : Point
-  , current : Point
+  { start : Mouse.Position
+  , current : Mouse.Position
   }
 
 type Msg
-  = DragStart Point
-  | DragAt Point
-  | DragEnd Point
+  = DragStart Mouse.Position
+  | DragAt Mouse.Position
+  | DragEnd Mouse.Position
   | ZoomIn
   | ZoomOut
 
 defaultModel =
   { config = { tileUrlPattern = "http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" }
-  , centre = { x = 123, y = 79 }
+  , centre = { x = 123.5, y = 79.5 }
   , zoom = 8
-  , offset = { x = 0, y = 0 }
   , renderSize = { width = 400, height = 400 }
   , tileSize = { width = 256, height = 256 }
   , drag = Nothing
@@ -72,9 +70,9 @@ update msg model =
 zoom : Model -> Int -> Model
 zoom model delta =
   let
-    latLon = latLonFromPoint model.zoom model.centre
+    latLon = latLonFromMapPoint model.zoom model.centre
     zoom = model.zoom + delta
-    centre = pointFromLatLon zoom latLon
+    centre = mapPointFromLatLon zoom latLon
   in
     { model | centre = centre, zoom = zoom }
 
@@ -85,16 +83,13 @@ applyDrag model =
       model
     Just {start, current} ->
       let
-        dx = current.x - start.x
-        dy = current.y - start.y
-        centreDX = (model.offset.x + dx) // model.tileSize.width
-        centreDY = (model.offset.y + dy) // model.tileSize.height
-        offsetDX = dx - centreDX * model.tileSize.height
-        offsetDY = dy - centreDY * model.tileSize.height
+        dx = toFloat (start.x - current.x)
+        dy = toFloat (start.y - current.y)
+        centreDX = dx / toFloat model.tileSize.width
+        centreDY = dy / toFloat model.tileSize.height
       in
         { model
-          | centre = translatePoint model.centre -centreDX -centreDY
-          , offset = translatePoint model.offset offsetDX offsetDY
+          | centre = translatePoint model.centre centreDX centreDY
           , drag = Nothing
         }
 
@@ -128,31 +123,28 @@ viewMapLayer model =
         , ("height", px model.renderSize.height)
         , ("position", "relative")
         , ("overflow", "hidden")
+        , ("background", "yellow")
         ]
       ]
       (List.map tileView' tiles')
 
-tiles : Model -> List Point
-tiles model =
-  (relativeTileRange model .x .width) `ListE.andThen` \x ->
-  (relativeTileRange model .y .height) `ListE.andThen` \y ->
-  [ translatePoint model.centre x y ]
-
-relativeTileRange : Model -> (Point -> Int) -> (Size -> Int) -> List Int
-relativeTileRange model axis size =
+tiles : Model -> List Tile
+tiles {centre, tileSize, renderSize} =
   let
-    tilesForSize s = (s + size model.tileSize - 1) // size model.tileSize
-    centre = centreTileCoord model axis size
-    before = tilesForSize centre
-    after = tilesForSize (size model.renderSize - centre) - 1
+    offsetX = truncate (frac centre.x * toFloat tileSize.width)
+    offsetY = truncate (frac centre.y * toFloat tileSize.height)
+    centreX = renderSize.width // 2 - offsetX
+    centreY = renderSize.height // 2 - offsetY
+    beforeX = roundDiv centreX tileSize.width
+    beforeY = roundDiv centreY tileSize.height
+    afterX = (roundDiv (renderSize.width - centreX) tileSize.width) - 1
+    afterY = (roundDiv (renderSize.height - centreY) tileSize.height) - 1
   in
-    [-before .. after]
+    [-beforeX .. afterX] `ListE.andThen` \x ->
+    [-beforeY .. afterY] `ListE.andThen` \y ->
+      [ { x = x, y = y } ]
 
-centreTileCoord : Model -> (Point -> Int) -> (Size -> Int) -> Int
-centreTileCoord {renderSize, tileSize, offset} axis size =
-  (size renderSize - size tileSize) // 2 + axis offset
-
-tileView: Model -> Point -> Html.Html Msg
+tileView: Model -> Tile -> Html.Html Msg
 tileView model pos =
    Html.img
     [ Attributes.style
@@ -166,25 +158,30 @@ tileView model pos =
     ]
     []
 
-translate3d: Model -> Point -> String
-translate3d model pos =
+translate3d : Model -> Tile -> String
+translate3d {renderSize, tileSize, centre} pos =
   let
-    coord axis size = (axis pos - axis model.centre) * size model.tileSize
-    x = (centreTileCoord model .x .width) + coord .x .width
-    y = (centreTileCoord model .y .height) + coord .y .height
+    fpos = mapPoint toFloat pos
+    scale i f = round ((toFloat i) * f)
+    x = renderSize.width // 2 + scale tileSize.width (fpos.x - frac centre.x)
+    y = renderSize.height // 2 + scale tileSize.height (fpos.y - frac centre.y)
   in
     stringWithSubstitutions "translate3d({x}px, {y}px, 0px)"
       [ ("{x}", toString x)
       , ("{y}", toString y) ]
 
-tileUrl: Model -> Point -> String
-tileUrl {config, zoom} {x, y} =
-  stringWithSubstitutions config.tileUrlPattern
-    [ ("{s}", x+y |> subdomain)
-    , ("{x}", toString x)
-    , ("{y}", toString y)
-    , ("{z}", toString zoom)
-    ]
+tileUrl : Model -> Tile -> String
+tileUrl {config, centre, zoom} {x, y} =
+  let
+    tileX = (truncate centre.x) + x
+    tileY = (truncate centre.y) + y
+  in
+    stringWithSubstitutions config.tileUrlPattern
+      [ ("{s}", x+y |> subdomain)
+      , ("{x}", toString tileX)
+      , ("{y}", toString tileY)
+      , ("{z}", toString zoom)
+      ]
 
 subdomain: Int -> String
 subdomain n =
@@ -201,7 +198,7 @@ viewControlsLayer model =
   , viewControlButton {x=20, y=40} ZoomOut "-"
   ]
 
-viewControlButton : Point -> Msg -> String -> Html.Html Msg
+viewControlButton : Point Int -> Msg -> String -> Html.Html Msg
 viewControlButton {x,y} action label =
   Html.button
   [ Attributes.style

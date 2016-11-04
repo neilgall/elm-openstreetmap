@@ -1,8 +1,8 @@
 module Projection exposing
   ( LatLon
   , Zoom
-  , pointFromLatLon
-  , latLonFromPoint
+  , mapPointFromLatLon
+  , latLonFromMapPoint
   )
 
 import Geometry exposing (..)
@@ -16,24 +16,22 @@ type alias Zoom = Int
 
 -- see https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 
-pointFromLatLon : Zoom -> LatLon -> Point
-pointFromLatLon zoom {latitude, longitude} =
+mapPointFromLatLon : Zoom -> LatLon -> MapPoint
+mapPointFromLatLon zoom {latitude, longitude} =
   let
     scale = 2^zoom |> toFloat
     lat' = degreesToRadians latitude
     x = scale * (longitude + 180) / 360
     y = scale * (1 - (logBase e (tan lat' + sec lat')) / pi) / 2
   in
-    { x = floor x, y = floor y }
+    { x = x, y = y }
 
-latLonFromPoint : Zoom -> Point -> LatLon
-latLonFromPoint zoom {x, y} =
+latLonFromMapPoint : Zoom -> MapPoint -> LatLon
+latLonFromMapPoint zoom {x, y} =
   let
     scale = 2^zoom |> toFloat
-    x' = toFloat x + 0.5
-    y' = toFloat y + 0.5
-    lon = x' / scale * 360 - 180
-    lat' = sinh (pi * (1 - 2 * y' / scale)) |> atan
+    lon = x / scale * 360 - 180
+    lat' = sinh (pi * (1 - 2 * y / scale)) |> atan
     lat = radiansToDegrees lat'
   in
     { latitude = lat, longitude = lon }
