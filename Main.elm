@@ -1,6 +1,7 @@
 import Html exposing (..)
 import Html.App as App
 import Html.Attributes exposing (..)
+import Geometry
 import Map
 
 main = App.program
@@ -10,8 +11,17 @@ main = App.program
   , subscriptions = Map.subscriptions
   }
 
+scotlandRegion : Geometry.MapRegion
+scotlandRegion =
+  { northWest = { x = 120, y = 70 }
+  , southEast = { x = 130, y = 80 }
+  }
+
 init : (Map.Model, Cmd Map.Msg)
-init = (Map.defaultModel, Cmd.none)
+init =
+  ( Map.mapModel Map.openStreetMapConfig scotlandRegion
+  , Cmd.none
+  )
 
 view : Map.Model -> Html Map.Msg
 view model =
@@ -24,5 +34,7 @@ view model =
       [ text "source" ]
     , text " on github"
     ]
-  , Map.view model
+  , div
+    [ style [ ("width", "600px"), ("height", "400px") ] ]
+    [ Map.view model ]
   ]

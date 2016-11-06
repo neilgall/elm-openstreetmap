@@ -1,8 +1,9 @@
 module Map exposing
-  ( Config
-  , Model
+  ( MapConfig
   , Msg
-  , defaultModel
+  , Model
+  , openStreetMapConfig
+  , mapModel
   , view
   , update
   , subscriptions
@@ -20,15 +21,16 @@ import Geometry exposing (..)
 import Projection exposing (..)
 import Util exposing (..)
 
-type alias Config =
-  { tileUrlPattern : String }
+type alias MapConfig =
+  { tileUrlPattern : String
+  , tileSize : TileSize
+  }
 
 type alias Model =
-  { config : Config
+  { config : MapConfig
   , centre : MapPoint
   , zoom : Int
   , renderSize : MapSize
-  , tileSize : TileSize
   , drag : Maybe Drag
   }
 
@@ -38,24 +40,45 @@ type alias Drag =
   }
 
 type Msg
-  = DragStart Mouse.Position
+  = MapResize MapSize
+  | DragStart Mouse.Position
   | DragAt Mouse.Position
   | DragEnd Mouse.Position
   | ZoomIn
   | ZoomOut
 
-defaultModel =
-  { config = { tileUrlPattern = "http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" }
-  , centre = { x = 123.5, y = 79.5 }
-  , zoom = 8
-  , renderSize = { width = 400, height = 400 }
+openStreetMapConfig : MapConfig
+openStreetMapConfig =
+  { tileUrlPattern = "http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
   , tileSize = { width = 256, height = 256 }
-  , drag = Nothing
   }
+
+mapModel : MapConfig -> MapRegion -> Model
+mapModel config region =
+  let
+    (mapCentre, mapZoom) = centreAndZoomFromRegion region
+  in
+    { config = config
+    , centre = mapCentre
+    , zoom = mapZoom
+    , renderSize = {width=600, height=400}
+    , drag = Nothing
+    }
+
+centreAndZoomFromRegion : MapRegion -> (MapPoint, Int)
+centreAndZoomFromRegion {northWest, southEast} =
+  let
+    centreX = (northWest.x + southEast.x) / 2
+    centreY = (northWest.y + southEast.y) / 2
+    zoom = 8 -- TBD
+  in
+    ({x = centreX, y = centreY}, zoom)
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case msg of
+    MapResize size ->
+      ({ model | renderSize = size}, Cmd.none)
     DragStart xy ->
       ({ model | drag = Just (Drag xy xy) }, Cmd.none)
     DragAt xy ->
@@ -85,8 +108,8 @@ applyDrag model =
       let
         dx = toFloat (start.x - current.x)
         dy = toFloat (start.y - current.y)
-        centreDX = dx / toFloat model.tileSize.width
-        centreDY = dy / toFloat model.tileSize.height
+        centreDX = dx / toFloat model.config.tileSize.width
+        centreDY = dy / toFloat model.config.tileSize.height
       in
         { model
           | centre = translatePoint model.centre centreDX centreDY
@@ -102,11 +125,22 @@ subscriptions model =
     Just _ ->
       Sub.batch [ Mouse.moves DragAt, Mouse.ups DragEnd ]
 
+getMapSize : Json.Decoder MapSize
+getMapSize =
+  let
+    width = Json.at ["target", "innerWidth"] Json.int
+    height = Json.at ["target", "innerHeight"] Json.int
+  in
+    Json.object2 (\w h -> { width = w, height = h }) width height
+
 view : Model -> Html.Html Msg
 view model =
   Html.div
   [ Attributes.style
-    [ ("position", "relative") ]
+    [ ("width", "100%")
+    , ("height", "100%")
+    , ("position", "relative") ]
+    , on "resize" (Json.map MapResize getMapSize)
   ]
   [ viewMapLayer model
   , viewControlsLayer model
@@ -122,8 +156,8 @@ viewMapLayer model =
     Html.div
       [ on "mousedown" (Json.map DragStart Mouse.position)
       , Attributes.style
-        [ ("width", px model.renderSize.width)
-        , ("height", px model.renderSize.height)
+        [ ("width", "100%")
+        , ("height", "100%")
         , ("position", "relative")
         , ("overflow", "hidden")
         , ("background", "yellow")
@@ -132,8 +166,9 @@ viewMapLayer model =
       (List.map tileView' tiles')
 
 tiles : Model -> List Tile
-tiles {centre, tileSize, renderSize} =
+tiles {centre, config, renderSize} =
   let
+    tileSize = config.tileSize
     offsetX = truncate (frac centre.x * toFloat tileSize.width)
     offsetY = truncate (frac centre.y * toFloat tileSize.height)
     centreX = renderSize.width // 2 - offsetX
@@ -152,8 +187,8 @@ tileView model pos =
    Html.img
     [ Attributes.style
       [ ("position", "absolute")
-      , ("width", px model.tileSize.width)
-      , ("height", px model.tileSize.height)
+      , ("width", px model.config.tileSize.width)
+      , ("height", px model.config.tileSize.height)
       , ("transform", translate3d model pos)
       ]
     , Attributes.draggable "false"
@@ -162,8 +197,9 @@ tileView model pos =
     []
 
 translate3d : Model -> Tile -> String
-translate3d {renderSize, tileSize, centre} pos =
+translate3d {renderSize, config, centre} pos =
   let
+    tileSize = config.tileSize
     fpos = mapPoint toFloat pos
     scale i f = round ((toFloat i) * f)
     x = renderSize.width // 2 + scale tileSize.width (fpos.x - frac centre.x)
