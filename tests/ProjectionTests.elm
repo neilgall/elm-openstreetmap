@@ -29,15 +29,14 @@ mapPointLatLonIsomorphism =
         ]
 
 zoomForLatLonRange_keepsRangeVisible =
-  fuzz3 randomLatLonPair randomTileCount randomTileCount
+  fuzz3 randomLatLonBounds randomTileCount randomTileCount
     "LatLon range is visible when calculating zoom" <|
-    \(southWest, northEast) w h ->
+    \bounds w h ->
       let
-        zoom = zoomForLatLonRange southWest northEast (Size w h)
-        swMapPoint = mapPointFromLatLon zoom southWest
-        neMapPoint = mapPointFromLatLon zoom northEast
-        centre = latlonBoundsCentre southWest northEast
-        centreMapPoint = mapPointFromLatLon zoom centre
+        zoom = zoomForLatLonRange bounds (Size w h)
+        swMapPoint = mapPointFromLatLon zoom bounds.southWest
+        neMapPoint = mapPointFromLatLon zoom bounds.northEast
+        centreMapPoint = mapPointFromLatLon zoom <| latlonBoundsCentre bounds
         halfWidth = (toFloat w) / 2
         halfHeight = (toFloat h) / 2
       in
@@ -47,14 +46,6 @@ zoomForLatLonRange_keepsRangeVisible =
           , Expect.lessThan (centreMapPoint.x + halfWidth) neMapPoint.x
           , Expect.lessThan (centreMapPoint.y + halfWidth) neMapPoint.y
           ]
-
-latlonBoundsCentre : LatLon -> LatLon -> LatLon
-latlonBoundsCentre p1 p2 =
-  let
-    latitude = (p1.latitude + p2.latitude) / 2
-    longitude = (p1.longitude + p2.longitude) / 2
-  in
-    LatLon latitude longitude
 
 minimumLatitude = -85.05
 maximumLatitude = 85.05
@@ -79,10 +70,12 @@ randomLatitudePair = randomOrderedPair minimumLatitude maximumLatitude
 randomLongitudePair : Fuzzer (Degrees, Degrees)
 randomLongitudePair = randomOrderedPair minimumLongitude maximumLongitude
 
-randomLatLonPair : Fuzzer (LatLon, LatLon)
-randomLatLonPair =
+randomLatLonBounds : Fuzzer LatLonBounds
+randomLatLonBounds =
   let
-    transpose lats lons =
-      (LatLon (fst lats) (fst lons), LatLon (snd lats) (snd lons))
+    boundsFrom lats lons =
+      { southWest = LatLon (fst lats) (fst lons)
+      , northEast = LatLon (snd lats) (snd lons)
+      }
   in
-    map2 transpose randomLatitudePair randomLongitudePair
+    map2 boundsFrom randomLatitudePair randomLongitudePair
