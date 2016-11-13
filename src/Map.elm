@@ -53,14 +53,14 @@ openStreetMapConfig =
   , tileSize = { width = 256, height = 256 }
   }
 
-mapModel : MapConfig -> LatLon -> LatLon -> Model
-mapModel config southWest northEast =
+mapModel : MapConfig -> LatLonBounds -> Model
+mapModel config bounds =
   let
     renderSize = {width=600, height=400}
     tilesX = renderSize.width // config.tileSize.width + 1
     tilesY = renderSize.height // config.tileSize.height + 1
     mapSize = {width = tilesX, height = tilesY}
-    (mapCentre, mapZoom) = centreAndZoomFromRegion southWest northEast mapSize
+    (mapCentre, mapZoom) = centreAndZoomFromRegion bounds mapSize
   in
     { config = config
     , centre = mapCentre
@@ -69,13 +69,11 @@ mapModel config southWest northEast =
     , drag = Nothing
     }
 
-centreAndZoomFromRegion : LatLon -> LatLon -> MapSize -> (MapPoint, Int)
-centreAndZoomFromRegion southWest northEast mapSize =
+centreAndZoomFromRegion : LatLonBounds -> MapSize -> (MapPoint, Int)
+centreAndZoomFromRegion bounds mapSize =
   let
-    zoom = zoomForLatLonRange southWest northEast mapSize
-    centreLat = (southWest.latitude + northEast.latitude) / 2
-    centreLon = (southWest.longitude + northEast.longitude) / 2
-    centre = mapPointFromLatLon zoom {latitude=centreLat, longitude=centreLon}
+    zoom = zoomForLatLonRange bounds mapSize
+    centre = mapPointFromLatLon zoom (latlonBoundsCentre bounds)
   in
     (centre, zoom)
 
@@ -91,12 +89,12 @@ update msg model =
     DragEnd xy ->
       (applyDrag model, Cmd.none)
     ZoomIn ->
-      (zoom model 1, Cmd.none)
+      (adjustZoom model 1, Cmd.none)
     ZoomOut ->
-      (zoom model -1, Cmd.none)
+      (adjustZoom model -1, Cmd.none)
 
-zoom : Model -> Int -> Model
-zoom model delta =
+adjustZoom : Model -> Int -> Model
+adjustZoom model delta =
   let
     latLon = latLonFromMapPoint model.zoom model.centre
     zoom = model.zoom + delta

@@ -1,8 +1,9 @@
 module Projection exposing
   ( LatLon
-  , LatLonSpan
+  , LatLonBounds
   , Zoom
   , Degrees
+  , latlonBoundsCentre
   , mapPointFromLatLon
   , latLonFromMapPoint
   , zoomForLatLonRange
@@ -11,7 +12,6 @@ module Projection exposing
 import Geometry exposing (..)
 
 type alias Zoom = Int
-type alias Metres = Float
 type alias Degrees = Float
 type alias Radians = Float
 
@@ -20,9 +20,9 @@ type alias LatLon =
   , longitude : Degrees
   }
 
-type alias LatLonSpan =
-  { latitudeSpan : Degrees
-  , longitudeSpan : Degrees
+type alias LatLonBounds =
+  { southWest : LatLon
+  , northEast : LatLon
   }
 
 sec : Radians -> Float
@@ -37,67 +37,69 @@ degreesToRadians d = d * pi / 180.0
 radiansToDegrees : Radians -> Degrees
 radiansToDegrees r = r / pi * 180.0
 
--- see http://www.movable-type.co.uk/scripts/latlong.html
+scaleFromZoom : Zoom -> Float
+scaleFromZoom z = toFloat <| 2^z
 
-radiusOfEarth : Metres
-radiusOfEarth = 6371e3
+zoomFromScale : Float -> Zoom
+zoomFromScale s = 1 + (floor <| logBase 2 s)
 
-distance : LatLon -> LatLon -> Metres
-distance p1 p2 =
+latlonBoundsCentre : LatLonBounds -> LatLon
+latlonBoundsCentre {southWest, northEast} =
   let
-    lat1 = degreesToRadians p1.latitude
-    lat2 = degreesToRadians p2.latitude
-    lon1 = degreesToRadians p1.longitude
-    lon2 = degreesToRadians p2.longitude
-    latDelta = lat2 - lat1
-    lonDelta = lon2 - lon1
-    sin2 x = (sin x) ^ 2
-    a = (sin2 <| latDelta / 2) + cos lat1 * cos lat2 * (sin2 <| lonDelta / 2)
-    c = 2 * (atan2 (sqrt a) (sqrt (1 - a)))
+    lat = (southWest.latitude + northEast.latitude) / 2
+    lon = (southWest.longitude + northEast.longitude) / 2
   in
-    radiusOfEarth * c
+    {latitude = lat, longitude = lon}
 
 -- see https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 
 mapPointFromLatLon : Zoom -> LatLon -> MapPoint
 mapPointFromLatLon zoom {latitude, longitude} =
   let
-    scale = 2^zoom |> toFloat
-    x = scale * tileXFromLongitude longitude
-    y = scale * tileYFromLatitude latitude
+    scale = scaleFromZoom zoom
+    x = scale * unscaledTileXFromLongitude longitude
+    y = scale * unscaledTileYFromLatitude latitude
   in
     { x = x, y = y }
 
 latLonFromMapPoint : Zoom -> MapPoint -> LatLon
 latLonFromMapPoint zoom {x, y} =
   let
-    scale = 2^zoom |> toFloat
-    lon = x / scale * 360 - 180
-    lat' = sinh (pi * (1 - 2 * y / scale)) |> atan
-    lat = radiansToDegrees lat'
+    scale = scaleFromZoom zoom
+    lon = longitudeFromUnscaledTileX <| x / scale
+    lat = latitudeFromUnscaledTileY <| y / scale
   in
     { latitude = lat, longitude = lon }
 
-tileXFromLongitude : Degrees -> Float
-tileXFromLongitude longitude =
-  (longitude + 180) / 360
+-- Tile X position for a longitude in range 0..1 (i.e. zoom not applied)
+unscaledTileXFromLongitude : Degrees -> Float
+unscaledTileXFromLongitude longitude = (longitude + 180) / 360
 
-tileYFromLatitude : Degrees -> Float
-tileYFromLatitude latitude =
+-- Tile Y position for a latitude in range 0..1 (i.e. zoom not applied)
+unscaledTileYFromLatitude : Degrees -> Float
+unscaledTileYFromLatitude latitude =
   let
     lat' = degreesToRadians latitude
   in
     (1 - (logBase e (tan lat' + sec lat')) / pi) / 2
 
--- Calculate map zoom value for a lat,lon range and a map size in tiles
-zoomForLatLonRange : LatLon -> LatLon -> MapSize -> Zoom
-zoomForLatLonRange southWest northEast {width, height} =
+-- Longitude from unscaled tile X position in range 0..1
+longitudeFromUnscaledTileX : Float -> Degrees
+longitudeFromUnscaledTileX x = x * 360 - 180
+
+-- Latitude from unscaled tile Y position in range 0..1
+latitudeFromUnscaledTileY : Float -> Degrees
+latitudeFromUnscaledTileY y =
+  radiansToDegrees <| atan <| sinh <| pi * (1 - 2 * y)
+
+-- Map zoom value for a map region and a map size in tiles
+zoomForLatLonRange : LatLonBounds -> MapSize -> Zoom
+zoomForLatLonRange {southWest, northEast} {width, height} =
   let
-    latDelta = degreesToRadians <| northEast.latitude - southWest.latitude
     lonDelta = degreesToRadians <| northEast.longitude - southWest.longitude
-    minY = tileYFromLatitude northEast.latitude
-    maxY = tileYFromLatitude southWest.latitude
-    yscale = (toFloat height) / (maxY - minY)
     xscale = (toFloat width) / lonDelta
+    minY = unscaledTileYFromLatitude northEast.latitude
+    maxY = unscaledTileYFromLatitude southWest.latitude
+    yscale = (toFloat height) / (maxY - minY)
   in
-    1 + (floor <| logBase 2 <| min xscale yscale)
+    zoomFromScale <| min xscale yscale
