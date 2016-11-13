@@ -1,7 +1,7 @@
 import Html exposing (..)
 import Html.App as App
 import Html.Attributes exposing (..)
-import Geometry
+import Projection exposing (LatLon)
 import Map
 
 main = App.program
@@ -11,15 +11,15 @@ main = App.program
   , subscriptions = Map.subscriptions
   }
 
-scotlandRegion : Geometry.MapRegion
-scotlandRegion =
-  { northWest = { x = 120, y = 70 }
-  , southEast = { x = 130, y = 80 }
-  }
+scotlandSouthWest : LatLon
+scotlandSouthWest = LatLon 54.07 -6.67
+
+scotlandNorthEast : LatLon
+scotlandNorthEast = LatLon 58.84 -1.62
 
 init : (Map.Model, Cmd Map.Msg)
 init =
-  ( Map.mapModel Map.openStreetMapConfig scotlandRegion
+  ( Map.mapModel Map.openStreetMapConfig scotlandSouthWest scotlandNorthEast
   , Cmd.none
   )
 

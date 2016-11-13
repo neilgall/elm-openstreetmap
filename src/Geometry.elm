@@ -1,7 +1,5 @@
 module Geometry exposing (..)
 
-import Mouse
-
 type alias Size a =
   { width : a
   , height : a
@@ -27,8 +25,3 @@ translatePoint {x, y} dx dy = { x = x + dx, y = y + dy }
 
 mapPoint : (number -> number') -> Point number -> Point number'
 mapPoint f {x, y} = { x = f x, y = f y }
-
-type alias MapRegion =
-  { northWest : MapPoint
-  , southEast : MapPoint
-  }

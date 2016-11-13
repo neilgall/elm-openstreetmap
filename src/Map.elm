@@ -53,30 +53,35 @@ openStreetMapConfig =
   , tileSize = { width = 256, height = 256 }
   }
 
-mapModel : MapConfig -> MapRegion -> Model
-mapModel config region =
+mapModel : MapConfig -> LatLon -> LatLon -> Model
+mapModel config southWest northEast =
   let
-    (mapCentre, mapZoom) = centreAndZoomFromRegion region
+    renderSize = {width=600, height=400}
+    tilesX = renderSize.width // config.tileSize.width + 1
+    tilesY = renderSize.height // config.tileSize.height + 1
+    mapSize = {width = tilesX, height = tilesY}
+    (mapCentre, mapZoom) = centreAndZoomFromRegion southWest northEast mapSize
   in
     { config = config
     , centre = mapCentre
     , zoom = mapZoom
-    , renderSize = {width=600, height=400}
+    , renderSize = renderSize
     , drag = Nothing
     }
 
-centreAndZoomFromRegion : MapRegion -> (MapPoint, Int)
-centreAndZoomFromRegion {northWest, southEast} =
+centreAndZoomFromRegion : LatLon -> LatLon -> MapSize -> (MapPoint, Int)
+centreAndZoomFromRegion southWest northEast mapSize =
   let
-    centreX = (northWest.x + southEast.x) / 2
-    centreY = (northWest.y + southEast.y) / 2
-    zoom = 8 -- TBD
+    zoom = zoomForLatLonRange southWest northEast mapSize
+    centreLat = (southWest.latitude + northEast.latitude) / 2
+    centreLon = (southWest.longitude + northEast.longitude) / 2
+    centre = mapPointFromLatLon zoom {latitude=centreLat, longitude=centreLon}
   in
-    ({x = centreX, y = centreY}, zoom)
+    (centre, zoom)
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
-  case msg of
+  case (Debug.log "msg" msg) of
     MapResize size ->
       ({ model | renderSize = size}, Cmd.none)
     DragStart xy ->
@@ -128,10 +133,10 @@ subscriptions model =
 getMapSize : Json.Decoder MapSize
 getMapSize =
   let
-    width = Json.at ["target", "innerWidth"] Json.int
-    height = Json.at ["target", "innerHeight"] Json.int
+    width = Json.at ["target", "offsetWidth"] Json.float
+    height = Json.at ["target", "offsetHeight"] Json.float
   in
-    Json.object2 (\w h -> { width = w, height = h }) width height
+    Json.object2 (\w h -> { width = round w, height = round h }) width height
 
 view : Model -> Html.Html Msg
 view model =
@@ -139,8 +144,10 @@ view model =
   [ Attributes.style
     [ ("width", "100%")
     , ("height", "100%")
-    , ("position", "relative") ]
-    , on "resize" (Json.map MapResize getMapSize)
+    , ("position", "relative")
+    ]
+  , on "load" (Json.map MapResize getMapSize)
+  , on "resize" (Json.map MapResize getMapSize)
   ]
   [ viewMapLayer model
   , viewControlsLayer model
@@ -160,7 +167,6 @@ viewMapLayer model =
         , ("height", "100%")
         , ("position", "relative")
         , ("overflow", "hidden")
-        , ("background", "yellow")
         ]
       ]
       (List.map tileView' tiles')
