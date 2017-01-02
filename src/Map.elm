@@ -13,7 +13,6 @@ import Debug
 import Html as Html
 import Html.Attributes as Attributes
 import Html.Events exposing (on, onClick)
-import List.Extra as ListE
 import Json.Decode as Json
 import Mouse
 
@@ -134,7 +133,7 @@ getMapSize =
     width = Json.at ["target", "offsetWidth"] Json.float
     height = Json.at ["target", "offsetHeight"] Json.float
   in
-    Json.object2 (\w h -> { width = round w, height = round h }) width height
+    Json.map2 (\w h -> { width = round w, height = round h }) width height
 
 view : Model -> Html.Html Msg
 view model =
@@ -155,8 +154,6 @@ viewMapLayer : Model -> Html.Html Msg
 viewMapLayer model =
   let
     renderModel = applyDrag model
-    tiles' = tiles renderModel
-    tileView' = tileView renderModel
   in
     Html.div
       [ on "mousedown" (Json.map DragStart Mouse.position)
@@ -167,7 +164,7 @@ viewMapLayer model =
         , ("overflow", "hidden")
         ]
       ]
-      (List.map tileView' tiles')
+      (List.map (tileView renderModel) (tiles renderModel))
 
 tiles : Model -> List Tile
 tiles {centre, config, renderSize} =
@@ -181,10 +178,10 @@ tiles {centre, config, renderSize} =
     beforeY = roundDiv centreY tileSize.height
     afterX = (roundDiv (renderSize.width - centreX) tileSize.width) - 1
     afterY = (roundDiv (renderSize.height - centreY) tileSize.height) - 1
+    xRange = List.range -beforeX afterX
+    yRange = List.range -beforeY afterY
   in
-    [-beforeX .. afterX] `ListE.andThen` \x ->
-    [-beforeY .. afterY] `ListE.andThen` \y ->
-      [ { x = x, y = y } ]
+    List.concatMap (\x -> List.map (\y -> { x=x, y=y }) yRange) xRange
 
 tileView: Model -> Tile -> Html.Html Msg
 tileView model pos =

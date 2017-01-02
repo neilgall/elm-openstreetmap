@@ -60,9 +60,8 @@ randomTileCount = intRange 2 10
 
 randomOrderedPair : Float -> Float -> Fuzzer (Float, Float)
 randomOrderedPair minimum maximum =
-  andThen (\lower ->
-     map2 (,) (constant lower) (floatRange (lower + 1e-3) maximum))
-     (floatRange minimum (maximum - 1e-3))
+  (floatRange minimum (maximum - 1e-3)) |> andThen
+    (\lower -> map2 (,) (constant lower) (floatRange (lower + 1e-3) maximum))
 
 randomLatitudePair : Fuzzer (Degrees, Degrees)
 randomLatitudePair = randomOrderedPair minimumLatitude maximumLatitude

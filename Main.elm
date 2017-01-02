@@ -1,10 +1,9 @@
 import Html exposing (..)
-import Html.App as App
 import Html.Attributes exposing (..)
 import Projection exposing (LatLon, LatLonBounds)
 import Map
 
-main = App.program
+main = Html.program
   { init = init
   , view = view
   , update = Map.update

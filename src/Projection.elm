@@ -79,9 +79,9 @@ unscaledTileXFromLongitude longitude = (longitude + 180) / 360
 unscaledTileYFromLatitude : Degrees -> Float
 unscaledTileYFromLatitude latitude =
   let
-    lat' = degreesToRadians latitude
+    latR = degreesToRadians latitude
   in
-    (1 - (logBase e (tan lat' + sec lat')) / pi) / 2
+    (1 - (logBase e (tan latR + sec latR)) / pi) / 2
 
 -- Longitude from unscaled tile X position in range 0..1
 longitudeFromUnscaledTileX : Float -> Degrees
