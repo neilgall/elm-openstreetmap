@@ -4,6 +4,7 @@ import Debug
 import Test exposing (..)
 import Fuzz exposing (..)
 import Expect
+import Tuple exposing (first, second)
 
 import Geometry exposing (..)
 import Projection exposing (..)
@@ -21,11 +22,11 @@ mapPointLatLonIsomorphism =
     \latlon zoom ->
       let
         mapPoint = mapPointFromLatLon zoom latlon
-        latlon' = latLonFromMapPoint zoom mapPoint
+        roundTripLatLon = latLonFromMapPoint zoom mapPoint
     in
       expectAll
-        [ expectEqualWithin 1e-8 latlon.latitude latlon'.latitude
-        , expectEqualWithin 1e-8 latlon.longitude latlon'.longitude
+        [ expectEqualWithin 1e-8 latlon.latitude roundTripLatLon.latitude
+        , expectEqualWithin 1e-8 latlon.longitude roundTripLatLon.longitude
         ]
 
 zoomForLatLonRange_keepsRangeVisible =
@@ -73,8 +74,8 @@ randomLatLonBounds : Fuzzer LatLonBounds
 randomLatLonBounds =
   let
     boundsFrom lats lons =
-      { southWest = LatLon (fst lats) (fst lons)
-      , northEast = LatLon (snd lats) (snd lons)
+      { southWest = LatLon (first lats) (first lons)
+      , northEast = LatLon (second lats) (second lons)
       }
   in
     map2 boundsFrom randomLatitudePair randomLongitudePair
