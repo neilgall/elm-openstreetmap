@@ -10,15 +10,19 @@ module Map exposing
   )
 
 import Debug
-import Html as Html
+import Html
 import Html.Attributes as Attributes
-import Html.Events exposing (on, onClick)
+import Html.Events exposing (on)
 import Json.Decode as Json
 import Mouse
 
+import Controls
 import Geometry exposing (..)
+import Message exposing (..)
 import Projection exposing (..)
 import Util exposing (..)
+
+type alias Msg = Message.Msg
 
 type alias MapConfig =
   { tileUrlPattern : String
@@ -37,14 +41,6 @@ type alias Drag =
   { start : Mouse.Position
   , current : Mouse.Position
   }
-
-type Msg
-  = MapResize MapSize
-  | DragStart Mouse.Position
-  | DragAt Mouse.Position
-  | DragEnd Mouse.Position
-  | ZoomIn
-  | ZoomOut
 
 openStreetMapConfig : MapConfig
 openStreetMapConfig =
@@ -147,7 +143,7 @@ view model =
   , on "resize" (Json.map MapResize getMapSize)
   ]
   [ viewMapLayer model
-  , viewControlsLayer model
+  , Controls.view
   ]
 
 viewMapLayer : Model -> Html.Html Msg
@@ -229,25 +225,3 @@ subdomain n =
     0 -> "a"
     1 -> "b"
     _ -> "c"
-
-viewControlsLayer : Model -> Html.Html Msg
-viewControlsLayer model =
-  Html.div
-  []
-  [ viewControlButton {x=20, y=20} ZoomIn "+"
-  , viewControlButton {x=20, y=50} ZoomOut "-"
-  ]
-
-viewControlButton : Point Int -> Msg -> String -> Html.Html Msg
-viewControlButton {x,y} action label =
-  Html.button
-  [ Attributes.style
-    [ ("position", "absolute")
-    , ("left", px x)
-    , ("top", px y)
-    , ("font-size", "large")
-    , ("width", "30px")
-    ]
-  , onClick action
-  ]
-  [Html.text label]
