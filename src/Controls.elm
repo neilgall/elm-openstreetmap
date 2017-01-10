@@ -1,7 +1,7 @@
 module Controls exposing (view)
 
-import Geometry exposing (Point)
 import Message exposing (..)
+import Point exposing (Point)
 import Util exposing (px)
 
 import Html

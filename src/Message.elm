@@ -1,10 +1,10 @@
 module Message exposing (Msg(..))
 
 import Mouse
-import Geometry exposing (..)
+import Size
 
 type Msg
-  = MapResize MapSize
+  = MapResize Size.Map
   | DragStart Mouse.Position
   | DragAt Mouse.Position
   | DragEnd Mouse.Position

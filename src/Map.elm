@@ -17,23 +17,25 @@ import Json.Decode as Json
 import Mouse
 
 import Controls
-import Geometry exposing (..)
+import LatLon
+import Markers
 import Message exposing (..)
-import Projection exposing (..)
+import Point
+import Size
 import Util exposing (..)
 
 type alias Msg = Message.Msg
 
 type alias MapConfig =
   { tileUrlPattern : String
-  , tileSize : TileSize
+  , tileSize : Size.Tile
   }
 
 type alias Model =
   { config : MapConfig
-  , centre : MapPoint
+  , centre : Point.Map
   , zoom : Int
-  , renderSize : MapSize
+  , renderSize : Size.Map
   , drag : Maybe Drag
   }
 
@@ -48,7 +50,7 @@ openStreetMapConfig =
   , tileSize = { width = 256, height = 256 }
   }
 
-mapModel : MapConfig -> LatLonBounds -> Model
+mapModel : MapConfig -> LatLon.Bounds -> Model
 mapModel config bounds =
   let
     renderSize = {width=600, height=400}
@@ -64,11 +66,11 @@ mapModel config bounds =
     , drag = Nothing
     }
 
-centreAndZoomFromRegion : LatLonBounds -> MapSize -> (MapPoint, Int)
+centreAndZoomFromRegion : LatLon.Bounds -> Size.Map -> (Point.Map, Int)
 centreAndZoomFromRegion bounds mapSize =
   let
-    zoom = zoomForLatLonRange bounds mapSize
-    centre = mapPointFromLatLon zoom (latlonBoundsCentre bounds)
+    zoom = LatLon.zoomForBounds bounds mapSize
+    centre = LatLon.toMapPoint zoom (LatLon.boundsCentre bounds)
   in
     (centre, zoom)
 
@@ -91,9 +93,9 @@ update msg model =
 adjustZoom : Model -> Int -> Model
 adjustZoom model delta =
   let
-    latLon = latLonFromMapPoint model.zoom model.centre
+    latLon = LatLon.fromMapPoint model.zoom model.centre
     zoom = model.zoom + delta
-    centre = mapPointFromLatLon zoom latLon
+    centre = LatLon.toMapPoint zoom latLon
   in
     { model | centre = centre, zoom = zoom }
 
@@ -110,7 +112,7 @@ applyDrag model =
         centreDY = dy / toFloat model.config.tileSize.height
       in
         { model
-          | centre = translatePoint model.centre centreDX centreDY
+          | centre = Point.translate model.centre centreDX centreDY
           , drag = Nothing
         }
 
@@ -123,7 +125,7 @@ subscriptions model =
     Just _ ->
       Sub.batch [ Mouse.moves DragAt, Mouse.ups DragEnd ]
 
-getMapSize : Json.Decoder MapSize
+getMapSize : Json.Decoder Size.Map
 getMapSize =
   let
     width = Json.at ["target", "offsetWidth"] Json.float
@@ -144,6 +146,7 @@ view model =
   ]
   [ viewMapLayer model
   , Controls.view
+  , Markers.view
   ]
 
 viewMapLayer : Model -> Html.Html Msg
@@ -162,7 +165,7 @@ viewMapLayer model =
       ]
       (List.map (tileView renderModel) (tiles renderModel))
 
-tiles : Model -> List Tile
+tiles : Model -> List Point.Tile
 tiles {centre, config, renderSize} =
   let
     tileSize = config.tileSize
@@ -179,7 +182,7 @@ tiles {centre, config, renderSize} =
   in
     List.concatMap (\x -> List.map (\y -> { x=x, y=y }) yRange) xRange
 
-tileView: Model -> Tile -> Html.Html Msg
+tileView: Model -> Point.Tile -> Html.Html Msg
 tileView model pos =
    Html.img
     [ Attributes.style
@@ -193,20 +196,28 @@ tileView model pos =
     ]
     []
 
-translate3d : Model -> Tile -> String
+translate3d : Model -> Point.Tile -> String
 translate3d {renderSize, config, centre} pos =
   let
-    tileSize = config.tileSize
-    fpos = mapPoint toFloat pos
-    scale i f = round ((toFloat i) * f)
-    x = renderSize.width // 2 + scale tileSize.width (fpos.x - frac centre.x)
-    y = renderSize.height // 2 + scale tileSize.height (fpos.y - frac centre.y)
+    fpos = Point.map toFloat pos
+    {x, y} = screenPointForMapPoint renderSize config.tileSize centre fpos
   in
     stringWithSubstitutions "translate3d({x}px, {y}px, 0px)"
       [ ("{x}", toString x)
       , ("{y}", toString y) ]
 
-tileUrl : Model -> Tile -> String
+-- Render coordinate for a Point.Map relative to the centre of the rendered map
+screenPointForMapPoint : Size.Render -> Size.Tile -> Point.Map -> Point.Map -> Point.Render
+screenPointForMapPoint screenSize tileSize mapCentre point =
+  let
+    scale i f = round ((toFloat i) * f)
+    centref = Point.map frac mapCentre
+    x = screenSize.width // 2 + scale tileSize.width (point.x - centref.x)
+    y = screenSize.height // 2 + scale tileSize.height (point.y - centref.y)
+  in
+    { x=x, y=y }
+
+tileUrl : Model -> Point.Tile -> String
 tileUrl {config, centre, zoom} {x, y} =
   let
     tileX = (truncate centre.x) + x

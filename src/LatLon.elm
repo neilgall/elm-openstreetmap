@@ -1,28 +1,30 @@
-module Projection exposing
-  ( LatLon
-  , LatLonBounds
+module LatLon exposing
+  ( Position
+  , Bounds
   , Zoom
   , Degrees
-  , latlonBoundsCentre
-  , mapPointFromLatLon
-  , latLonFromMapPoint
-  , zoomForLatLonRange
+  , boundsCentre
+  , toMapPoint
+  , fromMapPoint
+  , zoomForBounds
   )
 
-import Geometry exposing (..)
+import Point
+import Size
+import Util exposing (frac)
 
 type alias Zoom = Int
 type alias Degrees = Float
 type alias Radians = Float
 
-type alias LatLon =
+type alias Position =
   { latitude : Degrees
   , longitude : Degrees
   }
 
-type alias LatLonBounds =
-  { southWest : LatLon
-  , northEast : LatLon
+type alias Bounds =
+  { southWest : Position
+  , northEast : Position
   }
 
 sec : Radians -> Float
@@ -43,8 +45,8 @@ scaleFromZoom z = toFloat <| 2^z
 zoomFromScale : Float -> Zoom
 zoomFromScale s = 1 + (floor <| logBase 2 s)
 
-latlonBoundsCentre : LatLonBounds -> LatLon
-latlonBoundsCentre {southWest, northEast} =
+boundsCentre : Bounds -> Position
+boundsCentre {southWest, northEast} =
   let
     lat = (southWest.latitude + northEast.latitude) / 2
     lon = (southWest.longitude + northEast.longitude) / 2
@@ -53,8 +55,8 @@ latlonBoundsCentre {southWest, northEast} =
 
 -- see https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
 
-mapPointFromLatLon : Zoom -> LatLon -> MapPoint
-mapPointFromLatLon zoom {latitude, longitude} =
+toMapPoint : Zoom -> Position -> Point.Map
+toMapPoint zoom {latitude, longitude} =
   let
     scale = scaleFromZoom zoom
     x = scale * unscaledTileXFromLongitude longitude
@@ -62,8 +64,8 @@ mapPointFromLatLon zoom {latitude, longitude} =
   in
     { x = x, y = y }
 
-latLonFromMapPoint : Zoom -> MapPoint -> LatLon
-latLonFromMapPoint zoom {x, y} =
+fromMapPoint : Zoom -> Point.Map -> Position
+fromMapPoint zoom {x, y} =
   let
     scale = scaleFromZoom zoom
     lon = longitudeFromUnscaledTileX <| x / scale
@@ -93,8 +95,8 @@ latitudeFromUnscaledTileY y =
   radiansToDegrees <| atan <| sinh <| pi * (1 - 2 * y)
 
 -- Map zoom value for a map region and a map size in tiles
-zoomForLatLonRange : LatLonBounds -> MapSize -> Zoom
-zoomForLatLonRange {southWest, northEast} {width, height} =
+zoomForBounds : Bounds -> Size.Map -> Zoom
+zoomForBounds {southWest, northEast} {width, height} =
   let
     lonDelta = degreesToRadians <| northEast.longitude - southWest.longitude
     xscale = (toFloat width) / lonDelta
@@ -103,3 +105,4 @@ zoomForLatLonRange {southWest, northEast} {width, height} =
     yscale = (toFloat height) / (maxY - minY)
   in
     zoomFromScale <| min xscale yscale
+

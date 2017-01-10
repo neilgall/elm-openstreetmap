@@ -1,6 +1,6 @@
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Projection exposing (LatLon, LatLonBounds)
+import LatLon
 import Map
 
 main = Html.program
@@ -10,9 +10,9 @@ main = Html.program
   , subscriptions = Map.subscriptions
   }
 
-scotland : LatLonBounds
-scotland = { southWest = LatLon 54.07 -6.67
-           , northEast = LatLon 58.84 -1.62
+scotland : LatLon.Bounds
+scotland = { southWest = LatLon.Position 54.07 -6.67
+           , northEast = LatLon.Position 58.84 -1.62
            }
 
 init : (Map.Model, Cmd Map.Msg)
