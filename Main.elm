@@ -2,6 +2,7 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import LatLon
 import Map
+import Marker
 
 main = Html.program
   { init = init
@@ -14,10 +15,14 @@ scotland : LatLon.Bounds
 scotland = { southWest = LatLon.Position 54.07 -6.67
            , northEast = LatLon.Position 58.84 -1.62
            }
+           
+edinburgh = { position = LatLon.Position 55.95 -3.2
+            , title = "Edinburgh"
+            }
 
 init : (Map.Model, Cmd Map.Msg)
 init =
-  ( Map.mapModel Map.openStreetMapConfig scotland
+  ( Map.mapModel Map.openStreetMapConfig scotland [edinburgh]
   , Cmd.none
   )
 

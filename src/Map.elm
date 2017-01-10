@@ -18,7 +18,7 @@ import Mouse
 
 import Controls
 import LatLon
-import Markers
+import Marker
 import Message exposing (..)
 import Point
 import Projection
@@ -38,6 +38,7 @@ type alias Model =
   , centre : Point.Map
   , zoom : Int
   , renderSize : Size.Map
+  , markers : List Marker.Marker
   , drag : Maybe Drag
   }
 
@@ -52,8 +53,8 @@ openStreetMapConfig =
   , tileSize = { width = 256, height = 256 }
   }
 
-mapModel : MapConfig -> LatLon.Bounds -> Model
-mapModel config bounds =
+mapModel : MapConfig -> LatLon.Bounds -> List Marker.Marker -> Model
+mapModel config bounds markers =
   let
     renderSize = {width=600, height=400}
     tilesX = renderSize.width // config.tileSize.width + 1
@@ -65,6 +66,7 @@ mapModel config bounds =
     , centre = mapCentre
     , zoom = mapZoom
     , renderSize = renderSize
+    , markers = markers
     , drag = Nothing
     }
 
@@ -137,36 +139,38 @@ getMapSize =
 
 view : Model -> Html.Html Msg
 view model =
-  Html.div
-  [ Attributes.style
-    [ ("width", "100%")
-    , ("height", "100%")
-    , ("position", "relative")
-    ]
-  , on "load" (Json.map MapResize getMapSize)
-  , on "resize" (Json.map MapResize getMapSize)
-  ]
-  [ viewMapLayer model
-  , Controls.view
-  , Markers.view
-  ]
-
-viewMapLayer : Model -> Html.Html Msg
-viewMapLayer model =
   let
     renderModel = applyDrag model
-    projection = projectionForModel model
+    projection = projectionForModel renderModel
+    latlonProjection = LatLon.toMapPoint model.zoom >> projection
   in
     Html.div
-      [ on "mousedown" (Json.map DragStart Mouse.position)
-      , Attributes.style
-        [ ("width", "100%")
-        , ("height", "100%")
-        , ("position", "relative")
-        , ("overflow", "hidden")
-        ]
+    [ Attributes.style
+      [ ("width", "100%")
+      , ("height", "100%")
+      , ("position", "relative")
       ]
-      (List.map (tileView renderModel projection) (tiles renderModel))
+    , on "load" (Json.map MapResize getMapSize)
+    , on "resize" (Json.map MapResize getMapSize)
+    ]
+    [ viewMapLayer projection renderModel
+    , viewMarkerLayer latlonProjection renderModel
+    , Controls.view
+    ]
+
+viewMapLayer : Projection.Projection -> Model -> Html.Html Msg
+viewMapLayer projection model =
+  Html.div
+    [ on "mousedown" (Json.map DragStart Mouse.position)
+    , Render.fullSize
+    ]
+    (List.map (tileView projection model) (tiles model))
+
+viewMarkerLayer : Marker.Projection -> Model -> Html.Html Msg
+viewMarkerLayer projection {markers} =
+  Html.div
+    [ Render.fullSize ]
+    (List.map (Marker.view projection) markers)
 
 tiles : Model -> List Point.Tile
 tiles {centre, config, renderSize} =
@@ -185,8 +189,8 @@ tiles {centre, config, renderSize} =
   in
     List.concatMap (\x -> List.map (\y -> { x=x, y=y }) yRange) xRange
 
-tileView: Model -> Projection.Projection -> Point.Tile -> Html.Html Msg
-tileView model projection pos =
+tileView: Projection.Projection -> Model -> Point.Tile -> Html.Html Msg
+tileView projection model pos =
    Html.img
     [ Attributes.style
       [ ("position", "absolute")
