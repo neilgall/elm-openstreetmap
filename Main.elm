@@ -4,11 +4,14 @@ import LatLon
 import Map
 import Marker
 
+type Msg = MapMsg Map.Msg
+
+main : Program Never Map.Model Msg
 main = Html.program
   { init = init
   , view = view
-  , update = Map.update
-  , subscriptions = Map.subscriptions
+  , update = update
+  , subscriptions = subscriptions
   }
 
 scotland : LatLon.Bounds
@@ -20,13 +23,13 @@ edinburgh = { position = LatLon.Position 55.95 -3.2
             , title = "Edinburgh"
             }
 
-init : (Map.Model, Cmd Map.Msg)
+init : (Map.Model, Cmd Msg)
 init =
   ( Map.mapModel Map.openStreetMapConfig scotland [edinburgh]
   , Cmd.none
   )
 
-view : Map.Model -> Html Map.Msg
+view : Map.Model -> Html Msg
 view model =
   div []
   [ h1 [] [text "elm-openstreetmap"]
@@ -39,5 +42,16 @@ view model =
     ]
   , div
     [ style [ ("width", "600px"), ("height", "400px") ] ]
-    [ Map.view model ]
+    [ Html.map MapMsg (Map.view model) ]
   ]
+
+update : Msg -> Map.Model -> (Map.Model, Cmd Msg)
+update msg model =
+  case msg of
+    MapMsg mapMsg ->
+      let (newModel, cmd) = Map.update mapMsg model
+      in (newModel, Cmd.map MapMsg cmd)
+
+subscriptions : Map.Model -> Sub Msg
+subscriptions model =
+  Sub.map MapMsg (Map.subscriptions model)

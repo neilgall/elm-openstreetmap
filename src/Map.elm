@@ -60,7 +60,7 @@ mapModel config bounds markers =
     tilesX = renderSize.width // config.tileSize.width + 1
     tilesY = renderSize.height // config.tileSize.height + 1
     mapSize = {width = tilesX, height = tilesY}
-    (mapCentre, mapZoom) = centreAndZoomFromRegion bounds mapSize
+    (mapCentre, mapZoom) = centreAndZoomFromBoundsAndTiles bounds mapSize
   in
     { config = config
     , centre = mapCentre
@@ -70,8 +70,8 @@ mapModel config bounds markers =
     , drag = Nothing
     }
 
-centreAndZoomFromRegion : LatLon.Bounds -> Size.Map -> (Point.Map, Int)
-centreAndZoomFromRegion bounds mapSize =
+centreAndZoomFromBoundsAndTiles : LatLon.Bounds -> Size.Map -> (Point.Map, Int)
+centreAndZoomFromBoundsAndTiles bounds mapSize =
   let
     zoom = LatLon.zoomForBounds bounds mapSize
     centre = LatLon.toMapPoint zoom (LatLon.boundsCentre bounds)
@@ -82,17 +82,17 @@ update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
   case (Debug.log "msg" msg) of
     MapResize size ->
-      ({ model | renderSize = size}, Cmd.none)
+      { model | renderSize = size } ! []
     DragStart xy ->
-      ({ model | drag = Just (Drag xy xy) }, Cmd.none)
+      { model | drag = Just (Drag xy xy) } ! []
     DragAt xy ->
-      ({ model | drag = Maybe.map (\{start} -> Drag start xy) model.drag }, Cmd.none)
+      { model | drag = Maybe.map (\{start} -> Drag start xy) model.drag } ! []
     DragEnd xy ->
-      (applyDrag model, Cmd.none)
+      applyDrag model ! []
     ZoomIn ->
-      (adjustZoom model 1, Cmd.none)
+      adjustZoom model 1 ! []
     ZoomOut ->
-      (adjustZoom model -1, Cmd.none)
+      adjustZoom model -1 ! []
 
 adjustZoom : Model -> Int -> Model
 adjustZoom model delta =
