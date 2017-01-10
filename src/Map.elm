@@ -141,8 +141,6 @@ view : Model -> Html.Html Msg
 view model =
   let
     renderModel = applyDrag model
-    projection = projectionForModel renderModel
-    latlonProjection = LatLon.toMapPoint model.zoom >> projection
   in
     Html.div
     [ Attributes.style
@@ -153,24 +151,31 @@ view model =
     , on "load" (Json.map MapResize getMapSize)
     , on "resize" (Json.map MapResize getMapSize)
     ]
-    [ viewMapLayer projection renderModel
-    , viewMarkerLayer latlonProjection renderModel
+    [ viewMapLayer renderModel
+    , viewMarkerLayer renderModel
     , Controls.view
     ]
 
-viewMapLayer : Projection.Projection -> Model -> Html.Html Msg
-viewMapLayer projection model =
-  Html.div
-    [ on "mousedown" (Json.map DragStart Mouse.position)
-    , Render.fullSize
-    ]
-    (List.map (tileView projection model) (tiles model))
+viewMapLayer : Model -> Html.Html Msg
+viewMapLayer model =
+  let
+    projection = projectionForModel model
+  in
+    Html.div
+      [ on "mousedown" (Json.map DragStart Mouse.position)
+      , Render.fullSize
+      ]
+      (List.map (tileView projection model) (tiles model))
 
-viewMarkerLayer : Marker.Projection -> Model -> Html.Html Msg
-viewMarkerLayer projection {markers} =
-  Html.div
-    [ Render.fullSize ]
-    (List.map (Marker.view projection) markers)
+viewMarkerLayer : Model -> Html.Html Msg
+viewMarkerLayer model =
+  let
+    relativeTo c p = { x = c.x - p.x, y = c.y - p.y }
+    projection = LatLon.toMapPoint model.zoom >> relativeTo model.centre >> projectionForModel model
+  in
+    Html.div
+      [ Render.fullSize ]
+      (List.map (Marker.view projection) model.markers)
 
 tiles : Model -> List Point.Tile
 tiles {centre, config, renderSize} =
