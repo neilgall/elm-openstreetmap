@@ -21,8 +21,10 @@ import LatLon
 import Markers
 import Message exposing (..)
 import Point
+import Projection
+import Render
 import Size
-import Util exposing (..)
+import Util exposing (frac, roundDiv, stringWithSubstitutions)
 
 type alias Msg = Message.Msg
 
@@ -153,6 +155,7 @@ viewMapLayer : Model -> Html.Html Msg
 viewMapLayer model =
   let
     renderModel = applyDrag model
+    projection = projectionForModel model
   in
     Html.div
       [ on "mousedown" (Json.map DragStart Mouse.position)
@@ -163,7 +166,7 @@ viewMapLayer model =
         , ("overflow", "hidden")
         ]
       ]
-      (List.map (tileView renderModel) (tiles renderModel))
+      (List.map (tileView renderModel projection) (tiles renderModel))
 
 tiles : Model -> List Point.Tile
 tiles {centre, config, renderSize} =
@@ -182,40 +185,23 @@ tiles {centre, config, renderSize} =
   in
     List.concatMap (\x -> List.map (\y -> { x=x, y=y }) yRange) xRange
 
-tileView: Model -> Point.Tile -> Html.Html Msg
-tileView model pos =
+tileView: Model -> Projection.Projection -> Point.Tile -> Html.Html Msg
+tileView model projection pos =
    Html.img
     [ Attributes.style
       [ ("position", "absolute")
-      , ("width", px model.config.tileSize.width)
-      , ("height", px model.config.tileSize.height)
-      , ("transform", translate3d model pos)
+      , ("width", Render.px model.config.tileSize.width)
+      , ("height", Render.px model.config.tileSize.height)
+      , ("transform", Point.map toFloat pos |> projection |> Render.translate3d)
       ]
     , Attributes.draggable "false"
     , Attributes.src (tileUrl model pos)
     ]
     []
 
-translate3d : Model -> Point.Tile -> String
-translate3d {renderSize, config, centre} pos =
-  let
-    fpos = Point.map toFloat pos
-    {x, y} = screenPointForMapPoint renderSize config.tileSize centre fpos
-  in
-    stringWithSubstitutions "translate3d({x}px, {y}px, 0px)"
-      [ ("{x}", toString x)
-      , ("{y}", toString y) ]
-
--- Render coordinate for a Point.Map relative to the centre of the rendered map
-screenPointForMapPoint : Size.Render -> Size.Tile -> Point.Map -> Point.Map -> Point.Render
-screenPointForMapPoint screenSize tileSize mapCentre point =
-  let
-    scale i f = round ((toFloat i) * f)
-    centref = Point.map frac mapCentre
-    x = screenSize.width // 2 + scale tileSize.width (point.x - centref.x)
-    y = screenSize.height // 2 + scale tileSize.height (point.y - centref.y)
-  in
-    { x=x, y=y }
+projectionForModel : Model -> Projection.Projection
+projectionForModel {renderSize, config, centre} =
+  Projection.project renderSize config.tileSize centre
 
 tileUrl : Model -> Point.Tile -> String
 tileUrl {config, centre, zoom} {x, y} =

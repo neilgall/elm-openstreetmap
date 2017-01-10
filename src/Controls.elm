@@ -2,7 +2,7 @@ module Controls exposing (view)
 
 import Message exposing (..)
 import Point exposing (Point)
-import Util exposing (px)
+import Render
 
 import Html
 import Html.Attributes as Attributes
@@ -21,8 +21,8 @@ button {x,y} action label =
   Html.button
   [ Attributes.style
     [ ("position", "absolute")
-    , ("left", px x)
-    , ("top", px y)
+    , ("left", Render.px x)
+    , ("top", Render.px y)
     , ("font-size", "large")
     , ("width", "30px")
     ]
